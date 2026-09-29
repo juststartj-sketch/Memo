@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f5a623">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="메모">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>메모</title>
+<style>
+:root{--bg:#f2f2f7;--card:#fff;--text:#1c1c1e;--sub:#8e8e93;--line:#e5e5ea;--accent:#f5a623}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f2f2f7;--sub:#8e8e93;--line:#2c2c2e}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text)}
+.app{display:flex;height:100vh;height:100dvh;padding-top:env(safe-area-inset-top)}
+.list-pane{width:100%;display:flex;flex-direction:column}
+.edit-pane{display:none;width:100%;flex-direction:column;background:var(--card)}
+.app.editing .list-pane{display:none}
+.app.editing .edit-pane{display:flex}
+header{display:flex;align-items:center;gap:8px;padding:14px 16px}
+h1{font-size:30px;font-weight:700;flex:1}
+#mode{font-size:14px;color:var(--accent);margin-left:6px}
+.user{color:var(--sub);font-size:12px;padding:0 16px 8px}
+.search{margin:0 16px 10px;padding:11px 14px;border:none;border-radius:10px;background:var(--line);color:var(--text);font-size:16px;outline:none}
+.chips{display:none;gap:8px;padding:0 16px 12px;overflow-x:auto}
+.chip{border:none;border-radius:16px;padding:6px 14px;font-size:14px;background:var(--line);color:var(--text);cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--accent);color:#fff}
+#list{flex:1;overflow-y:auto;padding:0 16px 110px}
+.item{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer}
+.item.active{outline:2px solid var(--accent)}
+.item .t{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .d{color:var(--accent);font-weight:600;font-size:14px;margin-right:8px}
+.item .tt{font-weight:600}
+.item .p{color:var(--sub);font-size:14px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{display:inline-block;font-size:12px;padding:1px 8px;border-radius:8px;background:var(--line);color:var(--sub);margin-right:6px}
+.empty{text-align:center;color:var(--sub);margin-top:80px;line-height:1.8}
+.fab{position:fixed;right:20px;bottom:calc(28px + env(safe-area-inset-bottom));width:60px;height:60px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:32px;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer}
+.btn{background:none;border:none;color:var(--accent);font-size:17px;padding:6px 4px;cursor:pointer}
+.del{color:#ff3b30}
+.save{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:16px;font-weight:600;cursor:pointer}
+.save:disabled{opacity:.35;cursor:default}
+#status{flex:1;text-align:center;color:var(--sub);font-size:13px}
+.catsel{align-self:flex-start;margin:4px 20px 0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:15px}
+.title{border:none;outline:none;padding:10px 20px;font-size:22px;font-weight:700;background:var(--card);color:var(--text);font-family:inherit;border-bottom:1px solid var(--line)}
+textarea{flex:1;border:none;outline:none;resize:none;padding:14px 20px 40px;font-size:17px;line-height:1.7;background:var(--card);color:var(--text);font-family:inherit}
+.setup{display:none;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;gap:12px;padding:calc(40px + env(safe-area-inset-top)) 20px 20px}
+.setup.show{display:flex}
+.setup input{padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:var(--card);color:var(--text)}
+#cfgMsg{color:var(--sub);font-size:14px}
+@media (min-width:768px){
+  .list-pane{width:360px;flex-shrink:0;border-right:1px solid var(--line)}
+  .edit-pane{display:flex;flex:1}
+  .app.editing .list-pane{display:flex}
+  .back{visibility:hidden}
+  .fab{right:auto;left:284px}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <section class="list-pane">
+    <header><h1>메모<span id="mode"></span></h1><button class="btn" id="setupBtn" onclick="openSetup()">설정</button></header>
+    <div class="user" id="user"></div>
+    <input class="search" id="search" placeholder="제목·내용 검색" oninput="render()">
+    <div class="chips" id="chips"></div>
+    <div id="list"><p class="empty">불러오는 중...</p></div>
+    <button class="fab" onclick="newMemo()">+</button>
+  </section>
+  <section class="edit-pane">
+    <header>
+      <button class="btn back" onclick="goBack()">‹ 목록</button>
+      <span id="status"></span>
+      <button class="btn del" onclick="delMemo()">삭제</button>
+      <button class="save" id="saveBtn" onclick="save()" disabled>저장</button>
+    </header>
+    <select class="catsel" id="cat"></select>
+    <input class="title" id="title" placeholder="제목 (선택)">
+    <textarea id="memo" placeholder="내용을 입력하세요"></textarea>
+  </section>
+</div>
+
+<section class="setup" id="setup">
+  <h1>연결 설정</h1>
+  <input id="cfgUrl" placeholder="API URL (https://script.google.com/.../exec)">
+  <input id="cfgKey" placeholder="비밀키">
+  <button class="save" onclick="saveCfg()">연결</button>
+  <p id="cfgMsg"></p>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const IS_GAS = typeof google !== 'undefined' && !!google.script;
+const app = $('app'), memo = $('memo'), title = $('title'), catSel = $('cat'), saveBtn = $('saveBtn');
+let cfg = IS_GAS ? null : JSON.parse(localStorage.getItem('memoCfg') || 'null');
+let currentId = null, saving = false, ver = 0, savedVer = 0, memos = [], view = [], cats = [], filter = '전체';
+let ONLY = IS_GAS ? null : '';   // 웹앱: 주소의 ?cat= 확인 전까지 null
+
+function gas(fn, ...args) {
+  return new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(no)[fn](...args));
+}
+async function api(action, p = {}) {
+  if (IS_GAS) {
+    if (action === 'list') return gas('listMemos', ONLY || '');
+    if (action === 'save') return gas('saveMemo', p.id, p.cat, p.title, p.text);
+    if (action === 'delete') return gas('deleteMemo', p.id);
+  }
+  const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, ...p }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.data;
+}
+
+const isDirty = () => ver !== savedVer;
+function setStatus(t) { $('status').textContent = t; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function hm() { return new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}); }
+function refreshBtn() { saveBtn.disabled = saving || !isDirty(); }
+
+function onEdit() { ver++; setStatus('저장 안 됨'); refreshBtn(); }
+memo.addEventListener('input', onEdit);
+title.addEventListener('input', onEdit);
+catSel.addEventListener('change', onEdit);
+title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); memo.focus(); } });
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+});
+window.addEventListener('beforeunload', e => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+function renderChips() {
+  const box = $('chips');
+  if (cats.length < 2) { box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  box.innerHTML = ['전체', ...cats].map(c =>
+    `<button class="chip ${c === filter ? 'on' : ''}" onclick="setFilter('${c}')">${esc(c)}</button>`).join('');
+}
+function setFilter(c) { filter = c; renderChips(); render(); }
+function renderCatSel() {
+  const v = catSel.value;
+  catSel.innerHTML = cats.map(c => `<option>${esc(c)}</option>`).join('');
+  if (cats.includes(v)) catSel.value = v;
+  catSel.style.display = cats.length < 2 ? 'none' : '';
+}
+
+async function save() {
+  if (saving || !isDirty()) return;
+  const body = memo.value, cat = catSel.value || cats[0];
+  if (!cat) { setStatus('불러오는 중... 잠시 후 저장'); return; }
+  if (!body.trim()) { setStatus('내용을 입력하세요'); return; }
+  const myVer = ver;
+  saving = true; refreshBtn(); setStatus('저장 중...');
+  try {
+    currentId = await api('save', { id: currentId, cat, title: title.value, text: body });
+    savedVer = myVer;
+    setStatus(isDirty() ? '저장 안 됨' : '저장됨 ' + hm());
+    load();
+  } catch (e) { setStatus('저장 실패: ' + (e.message || e)); }
+  saving = false; refreshBtn();
+}
+
+function leave() {
+  if (saving) { setStatus('저장 중... 잠시 후 다시 눌러주세요'); return false; }
+  if (isDirty() && !confirm('저장하지 않은 내용이 있습니다. 버리고 나갈까요?')) return false;
+  return true;
+}
+function openEditor(m) {
+  currentId = m ? m.id : null;
+  title.value = m ? m.title : '';
+  memo.value = m ? m.text : '';
+  catSel.value = m ? m.cat : (filter !== '전체' ? filter : cats[0] || '');
+  ver = savedVer = 0;
+  setStatus(m ? '수정 ' + m.updated : '새 메모');
+  refreshBtn(); app.classList.add('editing'); render();
+}
+function newMemo() { if (!leave()) return; openEditor(null); title.focus(); }
+function openMemo(i) { if (!leave()) return; openEditor(view[i]); }
+function goBack() {
+  if (!leave()) return;
+  currentId = null; ver = savedVer = 0; title.value = ''; memo.value = '';
+  setStatus(''); refreshBtn(); app.classList.remove('editing'); render();
+}
+
+function delMemo() {
+  if (saving) return;
+  if (!currentId) {
+    if (isDirty() && !confirm('작성 중인 메모를 버릴까요?')) return;
+    ver = savedVer; goBack(); return;
+  }
+  if (!confirm('이 메모를 삭제할까요?')) return;
+  const id = currentId;
+  ver = savedVer; goBack();
+  memos = memos.filter(m => m.id !== id); render();
+  api('delete', { id }).then(load).catch(e => { alert('삭제 실패: ' + (e.message || e)); load(); });
+}
+
+function render() {
+  const q = $('search').value.trim().toLowerCase();
+  view = memos.filter(m => (filter === '전체' || m.cat === filter) &&
+    (!q || (m.title + ' ' + m.text).toLowerCase().includes(q)));
+  if (!view.length) {
+    $('list').innerHTML = '<p class="empty">' + (q ? '검색 결과 없음' : '메모가 없습니다<br>+ 버튼으로 시작하세요') + '</p>';
+    return;
+  }
+  $('list').innerHTML = view.map((m, i) => {
+    const first = m.text.split('\n').find(l => l.trim()) || '';
+    const badge = cats.length > 1 ? `<span class="badge">${esc(m.cat)}</span>` : '';
+    return `<div class="item ${m.id === currentId ? 'active' : ''}" onclick="openMemo(${i})">
+      <div class="t">${badge}<span class="d">${m.date}</span><span class="tt">${esc(m.title)}</span></div>
+      <div class="p">${esc(first)}</div></div>`;
+  }).join('');
+}
+
+async function load() {
+  if ((!IS_GAS && !cfg) || ONLY === null) return;
+  try {
+    const r = await api('list');
+    memos = r.memos;
+    if (JSON.stringify(r.cats) !== JSON.stringify(cats)) {
+      cats = r.cats;
+      if (filter !== '전체' && !cats.includes(filter)) filter = '전체';
+      $('mode').textContent = cats.length === 1 ? cats[0] + ' 전용' : '';
+      renderChips(); renderCatSel();
+    }
+    if (currentId && !isDirty() && !saving) {
+      const m = memos.find(x => x.id === currentId);
+      if (!m) setStatus('다른 기기에서 삭제된 메모');
+      else if (m.text !== memo.value || m.title !== title.value || m.cat !== catSel.value) {
+        title.value = m.title; memo.value = m.text; catSel.value = m.cat; setStatus('다른 기기 수정 반영됨');
+      }
+    }
+    render();
+  } catch (e) {
+    if (!memos.length) $('list').innerHTML = '<p class="empty">불러오기 실패<br>' + esc(e.message || e) + '</p>';
+  }
+}
+
+function openSetup() {
+  $('cfgUrl').value = cfg ? cfg.url : '';
+  $('cfgKey').value = cfg ? cfg.key : '';
+  $('setup').classList.add('show');
+}
+async function saveCfg() {
+  const url = $('cfgUrl').value.trim(), key = $('cfgKey').value.trim();
+  if (!url || !key) return;
+  const old = cfg; cfg = { url, key };
+  $('cfgMsg').textContent = '연결 확인 중...';
+  try {
+    await api('list');
+    localStorage.setItem('memoCfg', JSON.stringify(cfg));
+    $('cfgMsg').textContent = '';
+    $('setup').classList.remove('show');
+    load();
+  } catch (e) {
+    cfg = old;
+    $('cfgMsg').textContent = '연결 실패: ' + e.message + ' (URL·비밀키·배포 권한 확인)';
+  }
+}
+
+if (IS_GAS) {
+  $('setupBtn').style.display = 'none';
+  gas('getUserEmail').then(e => $('user').textContent = e);
+  google.script.url.getLocation(loc => { ONLY = loc.parameter.cat || ''; load(); });
+} else {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+  if (!cfg) openSetup(); else load();
+}
+setInterval(load, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>
