@@ -15,10 +15,15 @@
 @media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f2f2f7;--sub:#8e8e93;--line:#2c2c2e}}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text)}
-.app{display:flex;height:100vh;height:100dvh;padding-top:env(safe-area-inset-top)}
-.list-pane{width:100%;display:flex;flex-direction:column}
-.edit-pane{display:none;width:100%;flex-direction:column;background:var(--card)}
+body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;height:100dvh}
+#tabs{display:none;gap:6px;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;background:var(--accent);flex-shrink:0}
+#tabs a{flex:1;text-align:center;padding:8px;border-radius:10px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;cursor:pointer}
+#tabs a.on{background:#fff;color:var(--accent)}
+body.tabs-on #tabs{display:flex}
+.app{display:flex;flex:1;min-height:0;padding-top:env(safe-area-inset-top)}
+body.tabs-on .app{padding-top:0}
+.list-pane{width:100%;display:flex;flex-direction:column;min-height:0}
+.edit-pane{display:none;width:100%;flex-direction:column;background:var(--card);min-height:0}
 .app.editing .list-pane{display:none}
 .app.editing .edit-pane{display:flex}
 header{display:flex;align-items:center;gap:8px;padding:14px 16px}
@@ -61,6 +66,8 @@ textarea{flex:1;border:none;outline:none;resize:none;padding:14px 20px 40px;font
 </style>
 </head>
 <body>
+<nav id="tabs"><a class="on">메모</a><a onclick="goHabit()">습관</a></nav>
+
 <div class="app" id="app">
   <section class="list-pane">
     <header><h1>메모<span id="mode"></span></h1><button class="btn" id="setupBtn" onclick="openSetup()">설정</button></header>
@@ -98,6 +105,9 @@ const app = $('app'), memo = $('memo'), title = $('title'), catSel = $('cat'), s
 let cfg = IS_GAS ? null : JSON.parse(localStorage.getItem('memoCfg') || 'null');
 let currentId = null, saving = false, ver = 0, savedVer = 0, memos = [], view = [], cats = [], filter = '전체';
 let ONLY = IS_GAS ? null : '';   // 웹앱: 주소의 ?cat= 확인 전까지 null
+
+// 메모/습관 탭: github.io 앱에서만 표시
+if (!IS_GAS && location.hostname.endsWith('github.io')) document.body.classList.add('tabs-on');
 
 function gas(fn, ...args) {
   return new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(no)[fn](...args));
@@ -165,6 +175,11 @@ function leave() {
   if (saving) { setStatus('저장 중... 잠시 후 다시 눌러주세요'); return false; }
   if (isDirty() && !confirm('저장하지 않은 내용이 있습니다. 버리고 나갈까요?')) return false;
   return true;
+}
+function goHabit() {
+  if (!leave()) return;
+  ver = savedVer;   // 확인창이 두 번 뜨지 않게
+  location.replace('habit.html');
 }
 function openEditor(m) {
   currentId = m ? m.id : null;
@@ -270,7 +285,5 @@ if (IS_GAS) {
 setInterval(load, 15000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 </script>
-<a id="habitLink" href="habit.html" style="display:none;position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom) + 20px);z-index:50;background:#f5a623;color:#fff;padding:12px 18px;border-radius:24px;text-decoration:none;font-weight:bold;box-shadow:0 3px 10px rgba(0,0,0,.3)">습관</a>
-<script>if (location.hostname.endsWith('github.io')) document.getElementById('habitLink').style.display = 'block';</script>
 </body>
 </html>
