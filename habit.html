@@ -53,6 +53,28 @@ input[type=text],input[type=number],input[type=password],select{width:100%;paddi
 .danger{background:none;color:#e74c3c;border:0;width:100%;padding:14px;font-size:15px;margin-top:8px;cursor:pointer}
 #archRow{display:flex;align-items:center;gap:8px;margin-top:14px}
 #setup{max-width:500px;margin:20px auto;padding:16px}
+.detail{position:fixed;inset:0;z-index:8;background:var(--bg);display:none;overflow-y:auto}
+.detail.on{display:block}
+.dhead{position:sticky;top:0;z-index:2;background:var(--acc);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 12px 12px;display:flex;align-items:center;gap:8px}
+.dhead b{flex:1;font-size:18px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dhead button{color:#fff;background:none;border:0;font-size:16px;cursor:pointer;padding:4px 6px}
+.dwrap{max-width:600px;margin:auto;padding:12px 12px 40px}
+.statg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--card);border-radius:12px;padding:10px 4px;text-align:center}
+.stat b{display:block;font-size:19px}
+.stat small{color:var(--sub);font-size:12px}
+.card{background:var(--card);border-radius:12px;padding:12px;margin-top:10px}
+.mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mnav button{background:none;border:0;font-size:22px;color:var(--text);cursor:pointer;padding:4px 14px}
+.mnav button:disabled{opacity:.2;cursor:default}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .wd{font-size:11px;color:var(--sub);text-align:center;padding:4px 0}
+.cal .d{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;cursor:pointer;background:var(--bg);line-height:1.15;user-select:none}
+.cal .d small{font-size:10px;font-weight:bold}
+.cal .d.fut{opacity:.3;cursor:default}
+.cal .d.today{outline:2px solid var(--acc)}
+.rec{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:15px}
+.rec:last-child{border-bottom:0}
 </style>
 </head>
 <body>
@@ -78,6 +100,23 @@ input[type=text],input[type=number],input[type=password],select{width:100%;paddi
     <button class="link" id="archBtn" onclick="toggleArch()">보관한 습관 보기</button>
   </div>
   <button class="fab" onclick="openEdit()">+</button>
+</div>
+
+<div class="detail" id="detail">
+  <div class="dhead">
+    <button onclick="history.back()">‹ 목록</button>
+    <b id="dName"></b>
+    <button onclick="openEdit(detailId)">수정</button>
+  </div>
+  <div class="dwrap">
+    <p id="dFreq" style="text-align:center;color:var(--sub);font-size:13px;margin:0 0 10px"></p>
+    <div class="statg" id="dStats"></div>
+    <div class="card">
+      <div class="mnav"><button onclick="moveMonth(-1)">‹</button><b id="dMonth"></b><button id="dNext" onclick="moveMonth(1)">›</button></div>
+      <div class="cal" id="dCal"></div>
+    </div>
+    <div class="card"><b style="font-size:14px">이 달 기록</b><div id="dRecs"></div></div>
+  </div>
 </div>
 
 <div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
@@ -133,6 +172,7 @@ const COLORS = ['#f5a623','#e74c3c','#3498db','#2ecc71','#9b59b6','#1abc9c','#e6
 const WD = '일월화수목금토';
 let cfg = JSON.parse(localStorage.getItem('habitCfg') || 'null');
 let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0], editType = 'bool';
+let detailId = null, dMonth = new Date();
 
 const pad = n => String(n).padStart(2, '0');
 const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -195,7 +235,9 @@ function stats(h) {
   if (j >= 0 && !ok[j]) j--;
   let streak = 0;
   while (j >= 0 && ok[j]) { streak++; j--; }
-  return { score: Math.round(score * 100), streak };
+  let run = 0, best = 0;
+  ok.forEach(g => { run = g ? run + 1 : 0; if (run > best) best = run; });
+  return { score: Math.round(score * 100), streak, best };
 }
 
 function ring(p, c) {
@@ -208,6 +250,7 @@ function ring(p, c) {
 }
 
 function render() {
+  renderDetail();
   const today = new Date();
   const days = [0, 1, 2, 3, 4].map(n => addDays(today, -n));
   $('days').innerHTML = '<div></div><div></div>' +
@@ -229,9 +272,81 @@ function render() {
       return `<div class="cell" style="color:${on ? h.color : 'var(--line)'}" onclick="setVal('${h.id}','${k}',${on ? 0 : 1})">${on ? '✓' : '✕'}</div>`;
     }).join('');
     return `<div class="row"><div>${ring(s.score, h.color)}</div>
-      <div class="name" onclick="openEdit('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
+      <div class="name" onclick="openDetail('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
       <small>${freqText(h)} · 연속 ${s.streak}일</small></div>${cells}</div>`;
   }).join('');
+}
+
+// ===== 상세 화면 (기록 보기) =====
+function openDetail(id) {
+  detailId = id;
+  const n = new Date();
+  dMonth = new Date(n.getFullYear(), n.getMonth(), 1);
+  $('detail').classList.add('on');
+  $('detail').scrollTop = 0;
+  history.pushState({ detail: 1 }, '');
+  renderDetail();
+}
+window.addEventListener('popstate', () => {
+  if (!detailId) return;
+  detailId = null;
+  $('detail').classList.remove('on');
+  closeModal();
+  render();
+});
+function moveMonth(n) {
+  dMonth = new Date(dMonth.getFullYear(), dMonth.getMonth() + n, 1);
+  renderDetail();
+}
+function dayTap(k) {
+  const h = data.habits.find(x => x.id === detailId);
+  if (!h) return;
+  if (h.type === 'num') enterNum(h.id, k);
+  else setVal(h.id, k, (data.checks[h.id] || {})[k] ? 0 : 1);
+}
+function renderDetail() {
+  if (!detailId) return;
+  const h = data.habits.find(x => x.id === detailId);
+  if (!h) return;
+  const ch = data.checks[h.id] || {}, s = stats(h), isNum = h.type === 'num', u = esc(h.unit || '');
+  const y = dMonth.getFullYear(), m = dMonth.getMonth(), pre = y + '-' + pad(m + 1);
+  const now = new Date(), todayK = ymd(now);
+  const keys = Object.keys(ch).filter(k => k.startsWith(pre + '-')).sort().reverse();
+  const mSum = keys.reduce((a, k) => a + Number(ch[k]), 0);
+
+  $('dName').textContent = h.name;
+  $('dFreq').innerHTML = freqText(h);
+  $('dStats').innerHTML = [
+    [s.score, '강도'],
+    [s.streak + '일', '현재 연속'],
+    [s.best + '일', '최고 연속'],
+    [isNum ? fmt(mSum) + u : keys.length + '회', '이번 달'],
+    [Object.keys(ch).length + '일', '전체 기록일'],
+    [h.created.slice(2).replace(/-/g, '.'), '시작일']
+  ].map(([v, l]) => `<div class="stat"><b style="color:${h.color}">${v}</b><small>${l}</small></div>`).join('');
+
+  $('dMonth').textContent = `${y}년 ${m + 1}월`;
+  $('dNext').disabled = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+
+  let html = [...WD].map(w => `<div class="wd">${w}</div>`).join('');
+  html += '<div></div>'.repeat(new Date(y, m, 1).getDay());
+  const last = new Date(y, m + 1, 0).getDate();
+  for (let d = 1; d <= last; d++) {
+    const k = pre + '-' + pad(d), v = ch[k], fut = k > todayK;
+    let st = '', inner = d;
+    if (v !== undefined) {
+      if (isNum) { st = `background:${h.color}33;color:${h.color}`; inner = `${d}<small>${fmt(v)}</small>`; }
+      else st = `background:${h.color};color:#fff;font-weight:bold`;
+    }
+    html += `<div class="d${fut ? ' fut' : ''}${k === todayK ? ' today' : ''}" style="${st}" ${fut ? '' : `onclick="dayTap('${k}')"`}>${inner}</div>`;
+  }
+  $('dCal').innerHTML = html;
+
+  $('dRecs').innerHTML = keys.length ? keys.map(k => {
+    const dt = parse(k);
+    return `<div class="rec" onclick="dayTap('${k}')"><span>${dt.getMonth() + 1}/${dt.getDate()} (${WD[dt.getDay()]})</span>
+      <b style="color:${h.color}">${isNum ? fmt(ch[k]) + u : '✓'}</b></div>`;
+  }).join('') : '<p class="empty" style="padding:16px 0">이 달 기록이 없습니다</p>';
 }
 
 function setVal(id, date, v) {
@@ -311,9 +426,11 @@ function saveHabit() {
 function delHabit() {
   const h = data.habits.find(x => x.id === editId);
   if (!h || !confirm(`"${h.name}" 습관과 기록을 모두 삭제할까요?`)) return;
-  data.habits = data.habits.filter(x => x.id !== editId);
-  closeModal(); render();
-  send('deleteHabit', { id: editId });
+  const id = editId;
+  data.habits = data.habits.filter(x => x.id !== id);
+  closeModal();
+  if (detailId) history.back(); else render();
+  send('deleteHabit', { id });
 }
 function toggleArch() {
   showArchived = !showArchived;
