@@ -10,9 +10,11 @@
 @media(prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1e;--text:#eee;--sub:#999;--line:#3a3a3c}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Malgun Gothic",sans-serif;-webkit-tap-highlight-color:transparent}
-header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:12px}
-header h1{font-size:20px;margin:0;flex:1}
+header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;display:flex;align-items:center;gap:8px}
 header a,header button{color:#fff;background:none;border:0;font-size:16px;text-decoration:none;cursor:pointer;padding:4px}
+.tabs{flex:1;display:flex;gap:6px}
+.tabs a{flex:1;text-align:center;padding:8px;border-radius:10px;font-weight:bold;font-size:15px;cursor:pointer}
+.tabs a.on{background:#fff;color:var(--acc)}
 #msg{text-align:center;font-size:13px;color:var(--sub);min-height:18px;padding-top:4px}
 .wrap{max-width:700px;margin:auto;padding:0 8px 100px}
 .days,.row{display:grid;grid-template-columns:44px 1fr repeat(5,44px);align-items:center}
@@ -21,19 +23,24 @@ header a,header button{color:#fff;background:none;border:0;font-size:16px;text-d
 .name{padding:0 8px;cursor:pointer;min-width:0}
 .name b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .name small{color:var(--sub);font-size:12px}
-.cell{height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold;cursor:pointer;user-select:none}
+.cell{height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;font-weight:bold;cursor:pointer;user-select:none;line-height:1.1}
+.cell.num{font-size:15px}
+.cell.num small{font-size:9px;font-weight:normal}
 .ring{width:38px;height:38px;color:var(--text)}
 .empty{text-align:center;color:var(--sub);padding:40px 0}
 .fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 20px);width:56px;height:56px;border-radius:50%;background:var(--acc);color:#fff;font-size:30px;border:0;box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer}
 .link{display:block;margin:16px auto;background:none;border:0;color:var(--sub);font-size:14px;cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
 .modal.on{display:flex}
-.sheet{background:var(--card);width:100%;max-width:500px;border-radius:16px 16px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.sheet{background:var(--card);width:100%;max-width:500px;max-height:90vh;overflow-y:auto;border-radius:16px 16px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px)}
 .sheet h2{margin:0 0 16px;font-size:18px}
 label{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
-input[type=text],input[type=number],input[type=password]{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
-.freq{display:flex;align-items:center;gap:8px}
-.freq input{width:70px !important;text-align:center}
+input[type=text],input[type=number],input[type=password],select{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+.freq{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.freq input,.freq select{width:80px !important;text-align:center}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;cursor:pointer}
+.seg button.sel{background:var(--acc);color:#fff;border-color:var(--acc)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chips button{padding:8px 12px;border-radius:16px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer}
 .colors{display:flex;gap:10px;flex-wrap:wrap}
@@ -50,8 +57,7 @@ input[type=text],input[type=number],input[type=password]{width:100%;padding:12px
 </head>
 <body>
 <header>
-  <a href="index.html">‹ 메모</a>
-  <h1>습관</h1>
+  <div class="tabs"><a onclick="location.replace('index.html')">메모</a><a class="on">습관</a></div>
   <button onclick="resetCfg()">⚙</button>
 </header>
 <div id="msg"></div>
@@ -77,17 +83,39 @@ input[type=text],input[type=number],input[type=password]{width:100%;padding:12px
 <div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="sheet">
     <h2 id="mTitle">새 습관</h2>
-    <label>이름</label>
-    <input type="text" id="hName" maxlength="40" placeholder="예: 스트레칭 10분">
-    <label>주기</label>
-    <div class="freq"><input type="number" id="hDen" min="1" max="31"> 일 동안 <input type="number" id="hNum" min="1" max="31"> 회</div>
-    <div class="chips">
-      <button onclick="preset(1,1)">매일</button>
-      <button onclick="preset(3,7)">주 3회</button>
-      <button onclick="preset(5,7)">주 5회</button>
-      <button onclick="preset(1,2)">2일마다</button>
-      <button onclick="preset(1,7)">주 1회</button>
+    <div id="typeRow">
+      <label>종류</label>
+      <div class="seg">
+        <button id="tBool" onclick="setType('bool')">예 / 아니오</button>
+        <button id="tNum" onclick="setType('num')">숫자 (측정형)</button>
+      </div>
     </div>
+    <label>이름</label>
+    <input type="text" id="hName" maxlength="40" placeholder="예: 스트레칭 / 팔굽혀펴기">
+
+    <div id="boolBox">
+      <label>주기</label>
+      <div class="freq"><input type="number" id="hDen" min="1" max="31"> 일 동안 <input type="number" id="hNum" min="1" max="31"> 회</div>
+      <div class="chips">
+        <button onclick="preset(1,1)">매일</button>
+        <button onclick="preset(3,7)">주 3회</button>
+        <button onclick="preset(5,7)">주 5회</button>
+        <button onclick="preset(1,2)">2일마다</button>
+        <button onclick="preset(1,7)">주 1회</button>
+      </div>
+    </div>
+
+    <div id="numBox">
+      <label>목표</label>
+      <div class="freq">
+        <select id="hPer"><option value="1">하루</option><option value="7">일주일</option><option value="30">한 달</option></select>
+        <input type="number" id="hTarget" step="any" min="0" placeholder="30">
+        <input type="text" id="hUnit" maxlength="10" placeholder="개">
+        <select id="hDir"><option value="ge">이상</option><option value="le">이하</option></select>
+      </div>
+      <label>예: 하루 30개 이상 / 일주일 10km 이상 / 하루 2잔 이하</label>
+    </div>
+
     <label>색상</label>
     <div class="colors" id="colors"></div>
     <div id="archRow"><input type="checkbox" id="hArch"><span>보관 (목록에서 숨기기)</span></div>
@@ -104,13 +132,14 @@ const $ = id => document.getElementById(id);
 const COLORS = ['#f5a623','#e74c3c','#3498db','#2ecc71','#9b59b6','#1abc9c','#e67e22','#7f8c8d'];
 const WD = '일월화수목금토';
 let cfg = JSON.parse(localStorage.getItem('habitCfg') || 'null');
-let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0];
+let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0], editType = 'bool';
 
 const pad = n => String(n).padStart(2, '0');
 const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 const addDays = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
 const parse = s => { const [a, b, c] = s.split('-').map(Number); return new Date(a, b - 1, c); };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = v => String(Math.round(Number(v) * 100) / 100);
 const msg = t => $('msg').textContent = t;
 
 async function api(action, args) {
@@ -131,6 +160,10 @@ async function send(action, args) {
 }
 
 function freqText(h) {
+  if (h.type === 'num') {
+    const p = { 1: '하루', 7: '주', 30: '월' }[h.den] || h.den + '일';
+    return `${p} ${fmt(h.target)}${esc(h.unit || '')} ${h.dir === 'le' ? '이하' : '이상'}`;
+  }
   if (h.num === h.den) return '매일';
   if (h.den === 7) return '주 ' + h.num + '회';
   if (h.num === 1) return h.den + '일마다';
@@ -140,17 +173,23 @@ function freqText(h) {
 function stats(h) {
   const ch = data.checks[h.id] || {};
   const today = addDays(new Date(), 0);
+  const isNum = h.type === 'num';
   let start = parse(h.created);
   Object.keys(ch).forEach(k => { const d = parse(k); if (d < start) start = d; });
-  const mult = Math.pow(0.5, Math.sqrt(h.num / h.den) / 13);
+  const mult = Math.pow(0.5, Math.sqrt(isNum ? 1 / h.den : h.num / h.den) / 13);
   const vals = [], ok = [];
   let sum = 0, score = 0, i = 0;
   for (let d = start; d <= today; d = addDays(d, 1), i++) {
-    const v = ch[ymd(d)] ? 1 : 0;
+    const v = Number(ch[ymd(d)] || 0);
     vals.push(v); sum += v;
     if (i >= h.den) sum -= vals[i - h.den];
-    score = score * mult + Math.min(1, sum / h.num) * (1 - mult);
-    ok.push(sum >= h.num);
+    sum = Math.round(sum * 100) / 100;
+    let r, good;
+    if (!isNum) { r = Math.min(1, sum / h.num); good = sum >= h.num; }
+    else if (h.dir === 'le') { good = sum <= h.target; r = good ? 1 : h.target / sum; }
+    else { r = Math.min(1, sum / h.target); good = sum >= h.target; }
+    score = score * mult + r * (1 - mult);
+    ok.push(good);
   }
   let j = ok.length - 1;
   if (j >= 0 && !ok[j]) j--;
@@ -181,8 +220,13 @@ function render() {
   $('list').innerHTML = list.map(h => {
     const s = stats(h), ch = data.checks[h.id] || {};
     const cells = days.map(d => {
-      const k = ymd(d), on = !!ch[k];
-      return `<div class="cell" style="color:${on ? h.color : 'var(--line)'}" onclick="tog('${h.id}','${k}',${on ? 0 : 1})">${on ? '✓' : '✕'}</div>`;
+      const k = ymd(d), v = ch[k];
+      if (h.type === 'num') {
+        const has = v !== undefined;
+        return `<div class="cell num" style="color:${has ? h.color : 'var(--line)'}" onclick="enterNum('${h.id}','${k}')">${has ? fmt(v) : '·'}<small>${has ? esc(h.unit || '') : ''}</small></div>`;
+      }
+      const on = !!v;
+      return `<div class="cell" style="color:${on ? h.color : 'var(--line)'}" onclick="setVal('${h.id}','${k}',${on ? 0 : 1})">${on ? '✓' : '✕'}</div>`;
     }).join('');
     return `<div class="row"><div>${ring(s.score, h.color)}</div>
       <div class="name" onclick="openEdit('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
@@ -190,12 +234,26 @@ function render() {
   }).join('');
 }
 
-function tog(id, date, v) {
+function setVal(id, date, v) {
   if (!data.checks[id]) data.checks[id] = {};
-  if (v) data.checks[id][date] = 1; else delete data.checks[id][date];
+  if (v > 0) data.checks[id][date] = v; else delete data.checks[id][date];
   render();
   if (navigator.vibrate) navigator.vibrate(15);
   send('toggle', { id, date, value: v });
+}
+function enterNum(id, date) {
+  const h = data.habits.find(x => x.id === id);
+  const cur = (data.checks[id] || {})[date];
+  const s = prompt(`${h.name} · ${date}\n숫자 입력 (${h.unit || '단위 없음'}) / 지우려면 빈칸`, cur !== undefined ? fmt(cur) : '');
+  if (s === null) return;
+  const t = s.trim();
+  let v = 0;
+  if (t !== '') {
+    v = parseFloat(t);
+    if (isNaN(v) || v < 0) { alert('0 이상의 숫자를 입력하세요'); return; }
+    v = Math.round(v * 100) / 100;
+  }
+  setVal(id, date, v);
 }
 
 function drawColors() {
@@ -203,11 +261,28 @@ function drawColors() {
     `<span style="background:${c}" class="${c === selColor ? 'sel' : ''}" onclick="selColor='${c}';drawColors()"></span>`).join('');
 }
 function preset(n, d) { $('hNum').value = n; $('hDen').value = d; }
+function setType(t) {
+  editType = t;
+  $('tBool').classList.toggle('sel', t === 'bool');
+  $('tNum').classList.toggle('sel', t === 'num');
+  $('boolBox').style.display = t === 'bool' ? 'block' : 'none';
+  $('numBox').style.display = t === 'num' ? 'block' : 'none';
+}
 function openEdit(id) {
   editId = id || null;
-  const h = data.habits.find(x => x.id === id) || { name: '', num: 1, den: 1, color: COLORS[0], archived: false };
+  const h = data.habits.find(x => x.id === id) ||
+    { name: '', type: 'bool', num: 1, den: 1, target: '', unit: '', dir: 'ge', color: COLORS[0], archived: false };
+  const isNum = h.type === 'num';
   $('mTitle').textContent = id ? '습관 수정' : '새 습관';
-  $('hName').value = h.name; $('hNum').value = h.num; $('hDen').value = h.den;
+  $('typeRow').style.display = id ? 'none' : 'block';
+  setType(isNum ? 'num' : 'bool');
+  $('hName').value = h.name;
+  $('hNum').value = isNum ? 1 : h.num;
+  $('hDen').value = isNum ? 1 : h.den;
+  $('hPer').value = isNum && [1, 7, 30].includes(h.den) ? String(h.den) : '1';
+  $('hTarget').value = isNum ? fmt(h.target) : '';
+  $('hUnit').value = h.unit || '';
+  $('hDir').value = h.dir === 'le' ? 'le' : 'ge';
   selColor = h.color; drawColors();
   $('hArch').checked = !!h.archived;
   $('archRow').style.display = id ? 'flex' : 'none';
@@ -219,11 +294,19 @@ function closeModal() { $('modal').classList.remove('on'); }
 function saveHabit() {
   const name = $('hName').value.trim();
   if (!name) { alert('이름을 입력하세요'); return; }
-  const num = parseInt($('hNum').value) || 1, den = parseInt($('hDen').value) || 1;
-  if (num > den) { alert('횟수가 기간(일)보다 클 수 없습니다'); return; }
   const old = data.habits.find(x => x.id === editId) || {};
+  const habit = { ...old, id: editId, name, type: editType, color: selColor, archived: $('hArch').checked };
+  if (editType === 'num') {
+    const target = parseFloat($('hTarget').value);
+    if (!(target > 0)) { alert('목표 숫자를 입력하세요'); return; }
+    Object.assign(habit, { num: 1, den: parseInt($('hPer').value), target, unit: $('hUnit').value.trim(), dir: $('hDir').value });
+  } else {
+    const num = parseInt($('hNum').value) || 1, den = parseInt($('hDen').value) || 1;
+    if (num > den) { alert('횟수가 기간(일)보다 클 수 없습니다'); return; }
+    Object.assign(habit, { num, den });
+  }
   closeModal(); msg('저장 중…');
-  send('saveHabit', { habit: { ...old, id: editId, name, num, den, color: selColor, archived: $('hArch').checked } });
+  send('saveHabit', { habit });
 }
 function delHabit() {
   const h = data.habits.find(x => x.id === editId);
