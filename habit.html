@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f5a623">
+<title>습관</title>
+<style>
+:root{--bg:#f4f4f6;--card:#fff;--text:#222;--sub:#888;--line:#d8d8de;--acc:#f5a623}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1e;--text:#eee;--sub:#999;--line:#3a3a3c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Malgun Gothic",sans-serif;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:12px}
+header h1{font-size:20px;margin:0;flex:1}
+header a,header button{color:#fff;background:none;border:0;font-size:16px;text-decoration:none;cursor:pointer;padding:4px}
+#msg{text-align:center;font-size:13px;color:var(--sub);min-height:18px;padding-top:4px}
+.wrap{max-width:700px;margin:auto;padding:0 8px 100px}
+.days,.row{display:grid;grid-template-columns:44px 1fr repeat(5,44px);align-items:center}
+.days{font-size:11px;color:var(--sub);text-align:center;padding:4px 8px;line-height:1.3}
+.row{background:var(--card);border-radius:12px;margin:6px 0;padding:8px}
+.name{padding:0 8px;cursor:pointer;min-width:0}
+.name b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.name small{color:var(--sub);font-size:12px}
+.cell{height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold;cursor:pointer;user-select:none}
+.ring{width:38px;height:38px;color:var(--text)}
+.empty{text-align:center;color:var(--sub);padding:40px 0}
+.fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 20px);width:56px;height:56px;border-radius:50%;background:var(--acc);color:#fff;font-size:30px;border:0;box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer}
+.link{display:block;margin:16px auto;background:none;border:0;color:var(--sub);font-size:14px;cursor:pointer}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.modal.on{display:flex}
+.sheet{background:var(--card);width:100%;max-width:500px;border-radius:16px 16px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.sheet h2{margin:0 0 16px;font-size:18px}
+label{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
+input[type=text],input[type=number],input[type=password]{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+.freq{display:flex;align-items:center;gap:8px}
+.freq input{width:70px !important;text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips button{padding:8px 12px;border-radius:16px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer}
+.colors{display:flex;gap:10px;flex-wrap:wrap}
+.colors span{width:34px;height:34px;border-radius:50%;cursor:pointer;border:3px solid transparent}
+.colors span.sel{border-color:var(--text)}
+.btns{display:flex;gap:8px;margin-top:20px}
+.btns button{flex:1;padding:14px;font-size:16px;border:0;border-radius:10px;cursor:pointer}
+.primary{background:var(--acc);color:#fff}
+.ghost{background:var(--bg);color:var(--text)}
+.danger{background:none;color:#e74c3c;border:0;width:100%;padding:14px;font-size:15px;margin-top:8px;cursor:pointer}
+#archRow{display:flex;align-items:center;gap:8px;margin-top:14px}
+#setup{max-width:500px;margin:20px auto;padding:16px}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html">‹ 메모</a>
+  <h1>습관</h1>
+  <button onclick="resetCfg()">⚙</button>
+</header>
+<div id="msg"></div>
+
+<div id="setup" style="display:none">
+  <h2>습관 API 연결</h2>
+  <label>습관 API URL (/exec 로 끝나는 주소)</label>
+  <input type="text" id="cUrl" autocomplete="off">
+  <label>비밀키</label>
+  <input type="password" id="cKey" autocomplete="off">
+  <div class="btns"><button class="primary" onclick="connect()">연결</button></div>
+</div>
+
+<div id="main" style="display:none">
+  <div class="wrap">
+    <div class="days" id="days"></div>
+    <div id="list"></div>
+    <button class="link" id="archBtn" onclick="toggleArch()">보관한 습관 보기</button>
+  </div>
+  <button class="fab" onclick="openEdit()">+</button>
+</div>
+
+<div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="sheet">
+    <h2 id="mTitle">새 습관</h2>
+    <label>이름</label>
+    <input type="text" id="hName" maxlength="40" placeholder="예: 스트레칭 10분">
+    <label>주기</label>
+    <div class="freq"><input type="number" id="hDen" min="1" max="31"> 일 동안 <input type="number" id="hNum" min="1" max="31"> 회</div>
+    <div class="chips">
+      <button onclick="preset(1,1)">매일</button>
+      <button onclick="preset(3,7)">주 3회</button>
+      <button onclick="preset(5,7)">주 5회</button>
+      <button onclick="preset(1,2)">2일마다</button>
+      <button onclick="preset(1,7)">주 1회</button>
+    </div>
+    <label>색상</label>
+    <div class="colors" id="colors"></div>
+    <div id="archRow"><input type="checkbox" id="hArch"><span>보관 (목록에서 숨기기)</span></div>
+    <div class="btns">
+      <button class="ghost" onclick="closeModal()">취소</button>
+      <button class="primary" onclick="saveHabit()">저장</button>
+    </div>
+    <button class="danger" id="delBtn" onclick="delHabit()">삭제</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = ['#f5a623','#e74c3c','#3498db','#2ecc71','#9b59b6','#1abc9c','#e67e22','#7f8c8d'];
+const WD = '일월화수목금토';
+let cfg = JSON.parse(localStorage.getItem('habitCfg') || 'null');
+let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0];
+
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const addDays = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
+const parse = s => { const [a, b, c] = s.split('-').map(Number); return new Date(a, b - 1, c); };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const msg = t => $('msg').textContent = t;
+
+async function api(action, args) {
+  const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, args }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.data;
+}
+async function load() {
+  if (!cfg || pending) return;
+  try { const d = await api('load', {}); if (!pending) { data = d; render(); } msg(''); }
+  catch (e) { msg('불러오기 실패: ' + e.message); }
+}
+async function send(action, args) {
+  pending++;
+  try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); } msg(''); }
+  catch (e) { pending--; msg('저장 실패: ' + e.message); load(); }
+}
+
+function freqText(h) {
+  if (h.num === h.den) return '매일';
+  if (h.den === 7) return '주 ' + h.num + '회';
+  if (h.num === 1) return h.den + '일마다';
+  return h.den + '일에 ' + h.num + '회';
+}
+
+function stats(h) {
+  const ch = data.checks[h.id] || {};
+  const today = addDays(new Date(), 0);
+  let start = parse(h.created);
+  Object.keys(ch).forEach(k => { const d = parse(k); if (d < start) start = d; });
+  const mult = Math.pow(0.5, Math.sqrt(h.num / h.den) / 13);
+  const vals = [], ok = [];
+  let sum = 0, score = 0, i = 0;
+  for (let d = start; d <= today; d = addDays(d, 1), i++) {
+    const v = ch[ymd(d)] ? 1 : 0;
+    vals.push(v); sum += v;
+    if (i >= h.den) sum -= vals[i - h.den];
+    score = score * mult + Math.min(1, sum / h.num) * (1 - mult);
+    ok.push(sum >= h.num);
+  }
+  let j = ok.length - 1;
+  if (j >= 0 && !ok[j]) j--;
+  let streak = 0;
+  while (j >= 0 && ok[j]) { streak++; j--; }
+  return { score: Math.round(score * 100), streak };
+}
+
+function ring(p, c) {
+  const r = 15, L = 2 * Math.PI * r;
+  return `<svg class="ring" viewBox="0 0 36 36">
+    <circle cx="18" cy="18" r="${r}" fill="none" style="stroke:var(--line)" stroke-width="4"/>
+    <circle cx="18" cy="18" r="${r}" fill="none" stroke="${c}" stroke-width="4" stroke-linecap="round"
+      stroke-dasharray="${L * p / 100} ${L}" transform="rotate(-90 18 18)"/>
+    <text x="18" y="22" text-anchor="middle" font-size="10" fill="currentColor">${p}</text></svg>`;
+}
+
+function render() {
+  const today = new Date();
+  const days = [0, 1, 2, 3, 4].map(n => addDays(today, -n));
+  $('days').innerHTML = '<div></div><div></div>' +
+    days.map(d => `<div>${WD[d.getDay()]}<br>${d.getDate()}</div>`).join('');
+  const list = data.habits.filter(h => !!h.archived === showArchived);
+  if (!list.length) {
+    $('list').innerHTML = `<p class="empty">${showArchived ? '보관한 습관이 없습니다' : '+ 버튼으로 습관을 추가하세요'}</p>`;
+    return;
+  }
+  $('list').innerHTML = list.map(h => {
+    const s = stats(h), ch = data.checks[h.id] || {};
+    const cells = days.map(d => {
+      const k = ymd(d), on = !!ch[k];
+      return `<div class="cell" style="color:${on ? h.color : 'var(--line)'}" onclick="tog('${h.id}','${k}',${on ? 0 : 1})">${on ? '✓' : '✕'}</div>`;
+    }).join('');
+    return `<div class="row"><div>${ring(s.score, h.color)}</div>
+      <div class="name" onclick="openEdit('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
+      <small>${freqText(h)} · 연속 ${s.streak}일</small></div>${cells}</div>`;
+  }).join('');
+}
+
+function tog(id, date, v) {
+  if (!data.checks[id]) data.checks[id] = {};
+  if (v) data.checks[id][date] = 1; else delete data.checks[id][date];
+  render();
+  if (navigator.vibrate) navigator.vibrate(15);
+  send('toggle', { id, date, value: v });
+}
+
+function drawColors() {
+  $('colors').innerHTML = COLORS.map(c =>
+    `<span style="background:${c}" class="${c === selColor ? 'sel' : ''}" onclick="selColor='${c}';drawColors()"></span>`).join('');
+}
+function preset(n, d) { $('hNum').value = n; $('hDen').value = d; }
+function openEdit(id) {
+  editId = id || null;
+  const h = data.habits.find(x => x.id === id) || { name: '', num: 1, den: 1, color: COLORS[0], archived: false };
+  $('mTitle').textContent = id ? '습관 수정' : '새 습관';
+  $('hName').value = h.name; $('hNum').value = h.num; $('hDen').value = h.den;
+  selColor = h.color; drawColors();
+  $('hArch').checked = !!h.archived;
+  $('archRow').style.display = id ? 'flex' : 'none';
+  $('delBtn').style.display = id ? 'block' : 'none';
+  $('modal').classList.add('on');
+  if (!id) setTimeout(() => $('hName').focus(), 100);
+}
+function closeModal() { $('modal').classList.remove('on'); }
+function saveHabit() {
+  const name = $('hName').value.trim();
+  if (!name) { alert('이름을 입력하세요'); return; }
+  const num = parseInt($('hNum').value) || 1, den = parseInt($('hDen').value) || 1;
+  if (num > den) { alert('횟수가 기간(일)보다 클 수 없습니다'); return; }
+  const old = data.habits.find(x => x.id === editId) || {};
+  closeModal(); msg('저장 중…');
+  send('saveHabit', { habit: { ...old, id: editId, name, num, den, color: selColor, archived: $('hArch').checked } });
+}
+function delHabit() {
+  const h = data.habits.find(x => x.id === editId);
+  if (!h || !confirm(`"${h.name}" 습관과 기록을 모두 삭제할까요?`)) return;
+  data.habits = data.habits.filter(x => x.id !== editId);
+  closeModal(); render();
+  send('deleteHabit', { id: editId });
+}
+function toggleArch() {
+  showArchived = !showArchived;
+  $('archBtn').textContent = showArchived ? '진행 중 습관 보기' : '보관한 습관 보기';
+  render();
+}
+
+async function connect() {
+  const url = $('cUrl').value.trim(), key = $('cKey').value.trim();
+  if (!url.endsWith('/exec')) { alert('주소는 /exec 로 끝나야 합니다'); return; }
+  cfg = { url, key }; msg('연결 중…');
+  try { data = await api('load', {}); localStorage.setItem('habitCfg', JSON.stringify(cfg)); msg(''); show(); }
+  catch (e) { cfg = null; msg('연결 실패: ' + e.message); }
+}
+function resetCfg() {
+  if (!confirm('연결 정보를 지우고 다시 입력할까요? (습관 기록은 지워지지 않습니다)')) return;
+  localStorage.removeItem('habitCfg'); cfg = null; show();
+}
+function show() {
+  $('setup').style.display = cfg ? 'none' : 'block';
+  $('main').style.display = cfg ? 'block' : 'none';
+  if (cfg) render();
+}
+
+show(); load();
+setInterval(load, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); load(); } });
+</script>
+</body>
+</html>
