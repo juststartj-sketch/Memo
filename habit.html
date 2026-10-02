@@ -75,6 +75,9 @@ input[type=text],input[type=number],input[type=password],select{width:100%;paddi
 .cal .d.today{outline:2px solid var(--acc)}
 .rec{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:15px}
 .rec:last-child{border-bottom:0}
+  /* 글자 블록 선택 막기 (입력칸은 제외) */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea,select{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 </style>
 </head>
 <body>
