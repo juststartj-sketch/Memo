@@ -108,6 +108,7 @@ const app = $('app'), memo = $('memo'), title = $('title'), catSel = $('cat'), s
 let cfg = IS_GAS ? null : JSON.parse(localStorage.getItem('memoCfg') || 'null');
 let currentId = null, saving = false, ver = 0, savedVer = 0, memos = [], view = [], cats = [], filter = '전체';
 let ONLY = IS_GAS ? null : '';   // 웹앱: 주소의 ?cat= 확인 전까지 null
+let editPushed = false;          // 편집 화면이 히스토리 한 칸을 차지했는지
 
 // 메모/습관 탭: github.io 앱에서만 표시
 if (!IS_GAS && location.hostname.endsWith('github.io')) document.body.classList.add('tabs-on');
@@ -220,6 +221,8 @@ function openEditor(m) {
   ver = savedVer = 0;
   setStatus(m ? '수정 ' + m.updated : '새 메모');
   refreshBtn(); app.classList.add('editing'); render();
+  // 폰 뒤로가기 = 목록으로 (편집 화면이 히스토리 한 칸을 차지)
+  if (!editPushed) { history.pushState({ edit: 1 }, ''); editPushed = true; }
 }
 function newMemo() { if (!leave()) return; openEditor(null); title.focus(); }
 function openMemo(i) { openMemoAsync(i); }
@@ -234,11 +237,24 @@ async function openMemoAsync(i) {
   }
   openEditor(m);
 }
-function goBack() {
-  if (!leave()) return;
+function closeEditor() {
   currentId = null; ver = savedVer = 0; title.value = ''; memo.value = '';
   setStatus(''); refreshBtn(); app.classList.remove('editing'); render();
+  editPushed = false;
 }
+function goBack() {
+  // 히스토리 항목이 있으면 뒤로가기로 닫아 목록/브라우저 히스토리를 맞춘다
+  if (editPushed) { history.back(); return; }
+  closeEditor();
+}
+window.addEventListener('popstate', () => {
+  if (!editPushed) return;
+  if (isDirty() && !confirm('저장하지 않은 내용이 있습니다. 나갈까요?')) {
+    history.pushState({ edit: 1 }, '');   // 편집 화면에 머무르기
+    return;
+  }
+  closeEditor();
+});
 
 function delMemo() {
   if (saving) return;
