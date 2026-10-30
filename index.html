@@ -121,7 +121,7 @@ async function api(action, p = {}) {
     if (action === 'save') return gas('saveMemo', p.id, p.cat, p.title, p.text);
     if (action === 'delete') return gas('deleteMemo', p.id);
   }
-  const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, ...p }) });
+  const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, v: 2, ...p }) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error);
   return j.data;
@@ -138,6 +138,22 @@ function apiUrlOk(u) {
 }
 function hm() { return new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}); }
 function refreshBtn() { saveBtn.disabled = saving || !isDirty(); }
+
+// 마지막 목록을 즉시 보여주기 위한 로컬 캐시 (주소가 바뀌면 무시)
+const CACHE_KEY = 'memoCache';
+function readCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (!c || !cfg || c.url !== cfg.url || !Array.isArray(c.memos)) return false;
+    cats = c.cats || []; memos = c.memos;
+    $('mode').textContent = cats.length === 1 ? cats[0] + ' 전용' : '';
+    return true;
+  } catch (e) { return false; }
+}
+function saveCache() {
+  if (IS_GAS || !cfg) return;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ url: cfg.url, cats: cats, memos: memos, at: Date.now() })); } catch (e) {}
+}
 
 function onEdit() { ver++; setStatus('저장 안 됨'); refreshBtn(); }
 memo.addEventListener('input', onEdit);
@@ -177,6 +193,8 @@ async function save() {
   saving = true; refreshBtn(); setStatus('저장 중...');
   try {
     currentId = await api('save', { id: currentId, cat, title: title.value, text: body });
+    const saved = memos.find(x => x.id === currentId);
+    if (saved) { saved.text = body; saved.cat = cat; saved.title = title.value; }
     savedVer = myVer;
     setStatus(isDirty() ? '저장 안 됨' : '저장됨 ' + hm());
     load();
@@ -197,14 +215,25 @@ function goHabit() {
 function openEditor(m) {
   currentId = m ? m.id : null;
   title.value = m ? m.title : '';
-  memo.value = m ? m.text : '';
+  memo.value = m ? (m.text || '') : '';
   catSel.value = m ? m.cat : (filter !== '전체' ? filter : cats[0] || '');
   ver = savedVer = 0;
   setStatus(m ? '수정 ' + m.updated : '새 메모');
   refreshBtn(); app.classList.add('editing'); render();
 }
 function newMemo() { if (!leave()) return; openEditor(null); title.focus(); }
-function openMemo(i) { if (!leave()) return; openEditor(view[i]); }
+function openMemo(i) { openMemoAsync(i); }
+async function openMemoAsync(i) {
+  if (!leave()) return;
+  const m = view[i];
+  if (!m) return;
+  if (m.text === undefined) {
+    setStatus('본문 불러오는 중...');
+    try { const r = await api('get', { id: m.id }); m.text = r.text; saveCache(); }
+    catch (e) { setStatus(''); alert('본문을 불러오지 못했습니다: ' + (e.message || e)); return; }
+  }
+  openEditor(m);
+}
 function goBack() {
   if (!leave()) return;
   currentId = null; ver = savedVer = 0; title.value = ''; memo.value = '';
@@ -220,20 +249,20 @@ function delMemo() {
   if (!confirm('이 메모를 삭제할까요?')) return;
   const id = currentId;
   ver = savedVer; goBack();
-  memos = memos.filter(m => m.id !== id); render();
+  memos = memos.filter(m => m.id !== id); render(); saveCache();
   api('delete', { id }).then(load).catch(e => { alert('삭제 실패: ' + (e.message || e)); load(); });
 }
 
 function render() {
   const q = $('search').value.trim().toLowerCase();
   view = memos.filter(m => (filter === '전체' || m.cat === filter) &&
-    (!q || (m.title + ' ' + m.text).toLowerCase().includes(q)));
+    (!q || (m.title + ' ' + (m.preview || '') + ' ' + (m.text || '')).toLowerCase().includes(q)));
   if (!view.length) {
     $('list').innerHTML = '<p class="empty">' + (q ? '검색 결과 없음' : '메모가 없습니다<br>+ 버튼으로 시작하세요') + '</p>';
     return;
   }
   $('list').innerHTML = view.map((m, i) => {
-    const first = m.text.split('\n').find(l => l.trim()) || '';
+    const first = m.preview !== undefined ? m.preview : ((m.text || '').split('\n').find(l => l.trim()) || '');
     const badge = cats.length > 1 ? `<span class="badge">${esc(m.cat)}</span>` : '';
     return `<div class="item ${m.id === currentId ? 'active' : ''}" onclick="openMemo(${i})">
       <div class="t">${badge}<span class="d">${m.date}</span><span class="tt">${esc(m.title)}</span></div>
@@ -245,7 +274,12 @@ async function load() {
   if ((!IS_GAS && !cfg) || ONLY === null) return;
   try {
     const r = await api('list');
-    memos = r.memos;
+    const prev = memos;
+    memos = r.memos.map(n => {
+      const o = prev.find(x => x.id === n.id);
+      if (o && o.text !== undefined && o.updated === n.updated) n.text = o.text;
+      return n;
+    });
     if (JSON.stringify(r.cats) !== JSON.stringify(cats)) {
       cats = r.cats;
       if (filter !== '전체' && !cats.includes(filter)) filter = '전체';
@@ -255,11 +289,12 @@ async function load() {
     if (currentId && !isDirty() && !saving) {
       const m = memos.find(x => x.id === currentId);
       if (!m) setStatus('다른 기기에서 삭제된 메모');
-      else if (m.text !== memo.value || m.title !== title.value || m.cat !== catSel.value) {
+      else if (m.text !== undefined && (m.text !== memo.value || m.title !== title.value || m.cat !== catSel.value)) {
         title.value = m.title; memo.value = m.text; catSel.value = m.cat; setStatus('다른 기기 수정 반영됨');
       }
     }
     render();
+    saveCache();
   } catch (e) {
     if (!memos.length) $('list').innerHTML = '<p class="empty">불러오기 실패<br>' + esc(e.message || e) + '</p>';
   }
@@ -294,7 +329,8 @@ if (IS_GAS) {
   google.script.url.getLocation(loc => { ONLY = loc.parameter.cat || ''; load(); });
 } else {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-  if (!cfg) openSetup(); else load();
+  if (!cfg) openSetup();
+  else { readCache(); renderChips(); renderCatSel(); render(); load(); }
 }
 setInterval(load, 15000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

@@ -187,6 +187,20 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmt = v => String(Math.round(Number(v) * 100) / 100);
 const msg = t => $('msg').textContent = t;
 
+// 마지막 데이터를 즉시 그리기 위한 로컬 캐시 (주소가 바뀌면 무시)
+const CACHE_KEY = 'habitCache';
+function readCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (!c || !cfg || c.url !== cfg.url || !c.data || !Array.isArray(c.data.habits)) return;
+    data = c.data;
+  } catch (e) {}
+}
+function saveCache() {
+  if (!cfg) return;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ url: cfg.url, data: data, at: Date.now() })); } catch (e) {}
+}
+
 async function api(action, args) {
   const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, args }) });
   const j = await r.json();
@@ -195,12 +209,12 @@ async function api(action, args) {
 }
 async function load() {
   if (!cfg || pending || (drag && drag.on)) return;
-  try { const d = await api('load', {}); if (!pending) { data = d; render(); } msg(''); }
+  try { const d = await api('load', {}); if (!pending) { data = d; render(); saveCache(); } msg(''); }
   catch (e) { msg('불러오기 실패: ' + e.message); }
 }
 async function send(action, args) {
   pending++;
-  try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); } msg(''); }
+  try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); saveCache(); } msg(''); }
   catch (e) { pending--; msg('저장 실패: ' + e.message); load(); }
 }
 
@@ -547,12 +561,12 @@ async function connect() {
   const url = $('cUrl').value.trim(), key = $('cKey').value.trim();
   if (!apiUrlOk(url)) { alert('https://script.google.com/…/exec 주소만 연결할 수 있습니다'); return; }
   cfg = { url, key }; msg('연결 중…');
-  try { data = await api('load', {}); localStorage.setItem('habitCfg', JSON.stringify(cfg)); msg(''); show(); }
+  try { data = await api('load', {}); localStorage.setItem('habitCfg', JSON.stringify(cfg)); saveCache(); msg(''); show(); }
   catch (e) { cfg = null; msg('연결 실패: ' + e.message); }
 }
 function resetCfg() {
   if (!confirm('연결 정보를 지우고 다시 입력할까요? (습관 기록은 지워지지 않습니다)')) return;
-  localStorage.removeItem('habitCfg'); cfg = null; show();
+  localStorage.removeItem('habitCfg'); localStorage.removeItem(CACHE_KEY); cfg = null; show();
 }
 function show() {
   $('setup').style.display = cfg ? 'none' : 'block';
@@ -560,6 +574,7 @@ function show() {
   if (cfg) render();
 }
 
+if (cfg) readCache();
 show(); load();
 setInterval(load, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); load(); } });
