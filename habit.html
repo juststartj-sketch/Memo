@@ -20,6 +20,8 @@ header a,header button{color:#fff;background:none;border:0;font-size:16px;text-d
 .days,.row{display:grid;grid-template-columns:44px 1fr repeat(5,44px);align-items:center}
 .days{font-size:11px;color:var(--sub);text-align:center;padding:4px 8px;line-height:1.3}
 .row{background:var(--card);border-radius:12px;margin:6px 0;padding:8px}
+.row.dragging{position:fixed;margin:0;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.35);opacity:.97;transition:none;pointer-events:none;will-change:top}
+.ph{border:2px dashed var(--line);border-radius:12px;margin:6px 0;background:none}
 .name{padding:0 8px;cursor:pointer;min-width:0}
 .name b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .name small{color:var(--sub);font-size:12px}
@@ -192,7 +194,7 @@ async function api(action, args) {
   return j.data;
 }
 async function load() {
-  if (!cfg || pending) return;
+  if (!cfg || pending || (drag && drag.on)) return;
   try { const d = await api('load', {}); if (!pending) { data = d; render(); } msg(''); }
   catch (e) { msg('불러오기 실패: ' + e.message); }
 }
@@ -274,10 +276,104 @@ function render() {
       const on = !!v;
       return `<div class="cell" style="color:${on ? h.color : 'var(--line)'}" onclick="setVal('${h.id}','${k}',${on ? 0 : 1})">${on ? '✓' : '✕'}</div>`;
     }).join('');
-    return `<div class="row"><div>${ring(s.score, h.color)}</div>
+    return `<div class="row" data-id="${h.id}"><div>${ring(s.score, h.color)}</div>
       <div class="name" onclick="openDetail('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
       <small>${freqText(h)} · 연속 ${s.streak}일</small></div>${cells}</div>`;
   }).join('');
+}
+
+// ===== 꾹 눌러서 순서 바꾸기 =====
+const listEl = $('list');
+let drag = null, suppressClick = false;
+
+listEl.addEventListener('pointerdown', e => {
+  if (drag || !e.isPrimary) return;
+  const row = e.target.closest('.row');
+  if (!row || row.parentNode !== listEl) return;
+  drag = { row, y0: e.clientY, y: e.clientY, on: false };
+  drag.timer = setTimeout(beginDrag, 400);
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.y = e.clientY;
+  if (!drag.on) {
+    if (Math.abs(e.clientY - drag.y0) > 10) cancelPress();
+    return;
+  }
+  e.preventDefault();
+  moveDrag();
+}, { passive: false });
+document.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false });
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', cancelPress);
+
+function cancelPress() {
+  if (!drag || drag.on) return;
+  clearTimeout(drag.timer);
+  drag = null;
+}
+
+function beginDrag() {
+  if (!drag) return;
+  const row = drag.row, r = row.getBoundingClientRect();
+  const ph = document.createElement('div');
+  ph.className = 'ph';
+  ph.style.height = r.height + 'px';
+  listEl.insertBefore(ph, row);
+  row.classList.add('dragging');
+  row.style.left = r.left + 'px';
+  row.style.top = r.top + 'px';
+  row.style.width = r.width + 'px';
+  drag.ph = ph; drag.off = drag.y0 - r.top; drag.on = true;
+  if (navigator.vibrate) navigator.vibrate(12);
+  moveDrag();
+}
+
+function moveDrag() {
+  const row = drag.row, ph = drag.ph;
+  row.style.top = (drag.y - drag.off) + 'px';
+  const sibs = [...listEl.children].filter(el => el !== row && el !== ph);
+  let before = null;
+  for (const el of sibs) {
+    const r = el.getBoundingClientRect();
+    if (drag.y < r.top + r.height / 2) { before = el; break; }
+  }
+  if (before) { if (ph.nextElementSibling !== before) listEl.insertBefore(ph, before); }
+  else if (ph !== listEl.lastElementChild) listEl.appendChild(ph);
+}
+
+function endDrag() {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  if (!drag.on) { drag = null; return; }
+  const row = drag.row, ph = drag.ph;
+  drag = null;
+  listEl.insertBefore(row, ph);
+  ph.remove();
+  row.classList.remove('dragging');
+  row.removeAttribute('style');
+  suppressClick = true;
+  setTimeout(() => { suppressClick = false; }, 400);
+  applyOrder([...listEl.querySelectorAll('.row')].map(r => r.dataset.id));
+}
+
+listEl.addEventListener('click', e => {
+  if (suppressClick) { e.stopPropagation(); e.preventDefault(); }
+}, true);
+
+// 화면에 보이는 습관 순서를 전체 배열의 같은 자리에 끼워 넣고 저장한다
+function applyOrder(ids) {
+  const all = data.habits, byId = {}, vis = new Set(ids), slots = [];
+  all.forEach((h, i) => { byId[h.id] = h; if (vis.has(h.id)) slots.push(i); });
+  if (slots.length !== ids.length) return;
+  const next = all.slice();
+  slots.forEach((s, i) => { next[s] = byId[ids[i]]; });
+  if (next.every((h, i) => h === all[i])) return;
+  data.habits = next;
+  render();
+  msg('저장 중…');
+  if (navigator.vibrate) navigator.vibrate(8);
+  send('reorder', { ids: next.map(h => h.id) });
 }
 
 // ===== 상세 화면 (기록 보기) =====
