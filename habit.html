@@ -537,9 +537,15 @@ function toggleArch() {
   render();
 }
 
+function apiUrlOk(u) {
+  try {
+    const x = new URL(u);
+    return x.protocol === 'https:' && /(^|\.)script\.google\.com$/.test(x.hostname) && x.pathname.endsWith('/exec');
+  } catch (e) { return false; }
+}
 async function connect() {
   const url = $('cUrl').value.trim(), key = $('cKey').value.trim();
-  if (!url.endsWith('/exec')) { alert('주소는 /exec 로 끝나야 합니다'); return; }
+  if (!apiUrlOk(url)) { alert('https://script.google.com/…/exec 주소만 연결할 수 있습니다'); return; }
   cfg = { url, key }; msg('연결 중…');
   try { data = await api('load', {}); localStorage.setItem('habitCfg', JSON.stringify(cfg)); msg(''); show(); }
   catch (e) { cfg = null; msg('연결 실패: ' + e.message); }

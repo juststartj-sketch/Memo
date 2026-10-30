@@ -1,4 +1,4 @@
-const C = 'memo-v5';
+const C = 'memo-v6';
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.json'])));
   self.skipWaiting();

@@ -96,7 +96,7 @@ input,textarea,select{-webkit-user-select:text;user-select:text;-webkit-touch-ca
 <section class="setup" id="setup">
   <h1>연결 설정</h1>
   <input id="cfgUrl" placeholder="API URL (https://script.google.com/.../exec)">
-  <input id="cfgKey" placeholder="비밀키">
+  <input id="cfgKey" type="password" placeholder="비밀키">
   <button class="save" onclick="saveCfg()">연결</button>
   <p id="cfgMsg"></p>
 </section>
@@ -129,7 +129,13 @@ async function api(action, p = {}) {
 
 const isDirty = () => ver !== savedVer;
 function setStatus(t) { $('status').textContent = t; }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function apiUrlOk(u) {
+  try {
+    const x = new URL(u);
+    return x.protocol === 'https:' && /(^|\.)script\.google\.com$/.test(x.hostname) && x.pathname.endsWith('/exec');
+  } catch (e) { return false; }
+}
 function hm() { return new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}); }
 function refreshBtn() { saveBtn.disabled = saving || !isDirty(); }
 
@@ -147,13 +153,17 @@ function renderChips() {
   const box = $('chips');
   if (cats.length < 2) { box.style.display = 'none'; return; }
   box.style.display = 'flex';
-  box.innerHTML = ['전체', ...cats].map(c =>
-    `<button class="chip ${c === filter ? 'on' : ''}" onclick="setFilter('${c}')">${esc(c)}</button>`).join('');
+  box.innerHTML = ['전체', ...cats].map((c, i) =>
+    `<button class="chip ${c === filter ? 'on' : ''}" data-i="${i}">${esc(c)}</button>`).join('');
 }
+$('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip');
+  if (b && b.dataset.i !== undefined) setFilter(['전체', ...cats][Number(b.dataset.i)]);
+});
 function setFilter(c) { filter = c; renderChips(); render(); }
 function renderCatSel() {
   const v = catSel.value;
-  catSel.innerHTML = cats.map(c => `<option>${esc(c)}</option>`).join('');
+  catSel.innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if (cats.includes(v)) catSel.value = v;
   catSel.style.display = cats.length < 2 ? 'none' : '';
 }
@@ -263,6 +273,7 @@ function openSetup() {
 async function saveCfg() {
   const url = $('cfgUrl').value.trim(), key = $('cfgKey').value.trim();
   if (!url || !key) return;
+  if (!apiUrlOk(url)) { $('cfgMsg').textContent = 'https://script.google.com/…/exec 주소만 연결할 수 있습니다'; return; }
   const old = cfg; cfg = { url, key };
   $('cfgMsg').textContent = '연결 확인 중...';
   try {
