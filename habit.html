@@ -206,7 +206,10 @@ input,textarea,select{-webkit-user-select:text;user-select:text;-webkit-touch-ca
 
 <script>
 const $ = id => document.getElementById(id);
-const COLORS = ['#2f6fed','#00a3c4','#2ecc71','#9b59b6','#e74c3c','#f5a623','#e67e22','#7f8c8d'];
+const COLORS = ['#2f6fed','#5b8def','#00a3c4','#1abc9c','#2ecc71','#9b59b6','#e74c3c','#7f8c8d'];
+// 예전 기본색(주황)으로 저장된 습관은 파랑으로 보여준다 (수정·저장하면 파랑으로 바뀜)
+const OLD_COLOR = { '#f5a623': '#2f6fed', '#e67e22': '#5b8def' };
+const hc = h => OLD_COLOR[String(h.color).toLowerCase()] || h.color;
 const WD = '일월화수목금토';
 let cfg = JSON.parse(localStorage.getItem('habitCfg') || 'null');
 let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0], editType = 'bool';
@@ -319,13 +322,13 @@ function render() {
       if (h.type === 'num') {
         const has = v !== undefined;
         if (!has) return `<div class="cell" onclick="enterNum('${h.id}','${k}')"><span class="chk add">+</span></div>`;
-        return `<div class="cell num" style="color:${h.color}" onclick="enterNum('${h.id}','${k}')">${fmt(v)}<small>${esc(h.unit || '')}</small></div>`;
+        return `<div class="cell num" style="color:${hc(h)}" onclick="enterNum('${h.id}','${k}')">${fmt(v)}<small>${esc(h.unit || '')}</small></div>`;
       }
       const on = !!v;
-      return `<div class="cell" onclick="setVal('${h.id}','${k}',${on ? 0 : 1})"><span class="chk" style="${on ? `background:${h.color};border-color:${h.color}` : ''}">${on ? '✓' : ''}</span></div>`;
+      return `<div class="cell" onclick="setVal('${h.id}','${k}',${on ? 0 : 1})"><span class="chk" style="${on ? `background:${hc(h)};border-color:${hc(h)}` : ''}">${on ? '✓' : ''}</span></div>`;
     }).join('');
-    return `<div class="row" data-id="${h.id}"><div>${ring(s.score, h.color)}</div>
-      <div class="name" onclick="openDetail('${h.id}')"><b style="color:${h.color}">${esc(h.name)}</b>
+    return `<div class="row" data-id="${h.id}"><div>${ring(s.score, hc(h))}</div>
+      <div class="name" onclick="openDetail('${h.id}')"><b style="color:${hc(h)}">${esc(h.name)}</b>
       <small>${freqText(h)}<br>연속 ${s.streak}일</small></div>${cells}</div>`;
   }).join('');
 }
@@ -470,7 +473,7 @@ function renderDetail() {
     [isNum ? fmt(mSum) + u : keys.length + '회', '이번 달'],
     [Object.keys(ch).length + '일', '전체 기록일'],
     [h.created.slice(2).replace(/-/g, '.'), '시작일']
-  ].map(([v, l]) => `<div class="stat"><b style="color:${h.color}">${v}</b><small>${l}</small></div>`).join('');
+  ].map(([v, l]) => `<div class="stat"><b style="color:${hc(h)}">${v}</b><small>${l}</small></div>`).join('');
 
   $('dMonth').textContent = `${y}년 ${m + 1}월`;
   $('dNext').disabled = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
@@ -482,8 +485,8 @@ function renderDetail() {
     const k = pre + '-' + pad(d), v = ch[k], fut = k > todayK;
     let st = '', inner = d;
     if (v !== undefined) {
-      if (isNum) { st = `background:${h.color}33;color:${h.color}`; inner = `${d}<small>${fmt(v)}</small>`; }
-      else st = `background:${h.color};color:#fff;font-weight:bold`;
+      if (isNum) { st = `background:${hc(h)}33;color:${hc(h)}`; inner = `${d}<small>${fmt(v)}</small>`; }
+      else st = `background:${hc(h)};color:#fff;font-weight:bold`;
     }
     html += `<div class="d${fut ? ' fut' : ''}${k === todayK ? ' today' : ''}" style="${st}" ${fut ? '' : `onclick="dayTap('${k}')"`}>${inner}</div>`;
   }
@@ -492,7 +495,7 @@ function renderDetail() {
   $('dRecs').innerHTML = keys.length ? keys.map(k => {
     const dt = parse(k);
     return `<div class="rec" onclick="dayTap('${k}')"><span>${dt.getMonth() + 1}/${dt.getDate()} (${WD[dt.getDay()]})</span>
-      <b style="color:${h.color}">${isNum ? fmt(ch[k]) + u : '✓'}</b></div>`;
+      <b style="color:${hc(h)}">${isNum ? fmt(ch[k]) + u : '✓'}</b></div>`;
   }).join('') : '<p class="empty" style="padding:16px 0">이 달 기록이 없습니다</p>';
 }
 
@@ -545,7 +548,7 @@ function openEdit(id) {
   $('hTarget').value = isNum ? fmt(h.target) : '';
   $('hUnit').value = h.unit || '';
   $('hDir').value = h.dir === 'le' ? 'le' : 'ge';
-  selColor = h.color; drawColors();
+  selColor = hc(h); drawColors();
   $('hArch').checked = !!h.archived;
   $('archRow').style.display = id ? 'flex' : 'none';
   $('delBtn').style.display = id ? 'block' : 'none';

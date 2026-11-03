@@ -148,6 +148,7 @@ function gas(fn, ...args) {
 async function api(action, p = {}) {
   if (IS_GAS) {
     if (action === 'list') return gas('listMemos', ONLY || '');
+    if (action === 'get') return gas('getMemo', p.id);
     if (action === 'save') return gas('saveMemo', p.id, p.cat, p.title, p.text);
     if (action === 'delete') return gas('deleteMemo', p.id);
   }
