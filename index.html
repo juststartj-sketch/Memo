@@ -4,21 +4,28 @@
 <base target="_top">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5a623">
+<meta name="theme-color" content="#3a7af5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#18306a" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="메모">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>메모</title>
 <style>
-:root{--bg:#f2f2f7;--card:#fff;--text:#1c1c1e;--sub:#8e8e93;--line:#e5e5ea;--accent:#f5a623}
-@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f2f2f7;--sub:#8e8e93;--line:#2c2c2e}}
+:root{--bg:#f3f6fb;--card:#fff;--text:#0f1b2d;--sub:#6b7a90;--line:#e3e9f2;--fill:#e9eef6;--accent:#2f6fed;--soft:rgba(47,111,237,.1);--danger:#e5484d;
+  --bar:linear-gradient(135deg,#4f8cff,#2f6fed);--grad:linear-gradient(135deg,#4f8cff,#2f6fed);--shadow:0 1px 2px rgba(15,27,45,.04),0 4px 14px rgba(15,27,45,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#141d2e;--text:#e8eef8;--sub:#8a99b2;--line:#22304a;--fill:#1b2740;--accent:#5b9bff;--soft:rgba(91,155,255,.16);
+  --bar:linear-gradient(135deg,#1f3d7a,#152a55);--grad:linear-gradient(135deg,#5b9bff,#3a78ee);--shadow:0 1px 2px rgba(0,0,0,.35)}}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;height:100dvh}
-#tabs{display:none;gap:6px;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;background:var(--accent);flex-shrink:0}
-#tabs a{flex:1;text-align:center;padding:8px;border-radius:10px;color:#fff;text-decoration:none;font-weight:bold;font-size:15px;cursor:pointer}
-#tabs a.on{background:#fff;color:var(--accent)}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 상단 메모/습관 탭 */
+#tabs{display:none;gap:4px;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;background:var(--bar);flex-shrink:0}
+#tabs a{flex:1;text-align:center;padding:9px;border-radius:12px;color:rgba(255,255,255,.85);text-decoration:none;font-weight:700;font-size:15px;cursor:pointer;transition:background .15s}
+#tabs a:not(.on):active{background:rgba(255,255,255,.15)}
+#tabs a.on{background:#fff;color:#2457d6;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 body.tabs-on #tabs{display:flex}
 .app{display:flex;flex:1;min-height:0;padding-top:env(safe-area-inset-top)}
 body.tabs-on .app{padding-top:0}
@@ -26,42 +33,63 @@ body.tabs-on .app{padding-top:0}
 .edit-pane{display:none;width:100%;flex-direction:column;background:var(--card);min-height:0}
 .app.editing .list-pane{display:none}
 .app.editing .edit-pane{display:flex}
-header{display:flex;align-items:center;gap:8px;padding:14px 16px}
-h1{font-size:30px;font-weight:700;flex:1}
-#mode{font-size:14px;color:var(--accent);margin-left:6px}
+header{display:flex;align-items:center;gap:8px;padding:16px 16px 12px}
+h1{font-size:28px;font-weight:800;letter-spacing:-.02em;flex:1}
+#mode{font-size:13px;font-weight:600;color:var(--accent);background:var(--soft);padding:3px 9px;border-radius:999px;margin-left:8px;vertical-align:middle}
+#mode:empty{display:none}
 .user{color:var(--sub);font-size:12px;padding:0 16px 8px}
-.search{margin:0 16px 10px;padding:11px 14px;border:none;border-radius:10px;background:var(--line);color:var(--text);font-size:16px;outline:none}
-.chips{display:none;gap:8px;padding:0 16px 12px;overflow-x:auto}
-.chip{border:none;border-radius:16px;padding:6px 14px;font-size:14px;background:var(--line);color:var(--text);cursor:pointer;white-space:nowrap}
-.chip.on{background:var(--accent);color:#fff}
-#list{flex:1;overflow-y:auto;padding:0 16px 110px}
-.item{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer}
-.item.active{outline:2px solid var(--accent)}
+.user:empty{display:none}
+/* 검색칸 (돋보기 아이콘) */
+.search{margin:0 16px 12px;padding:12px 14px 12px 40px;border:1px solid transparent;border-radius:12px;background:var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238a99b2' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='m16 16-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px center;color:var(--text);font-size:16px;outline:none;transition:border-color .15s,box-shadow .15s}
+.search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft);background-color:var(--card)}
+.search::placeholder{color:var(--sub)}
+.chips{display:none;gap:8px;padding:0 16px 12px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--line);border-radius:999px;padding:7px 15px;font-size:14px;font-weight:600;background:var(--card);color:var(--sub);cursor:pointer;white-space:nowrap;transition:all .15s}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#list{flex:1;overflow-y:auto;padding:2px 16px 120px}
+/* 메모 카드 */
+.item{background:var(--card);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;box-shadow:var(--shadow);border:1px solid transparent;transition:transform .12s,border-color .15s}
+.item:active{transform:scale(.985)}
+.item.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
 .item .t{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .d{color:var(--accent);font-weight:600;font-size:14px;margin-right:8px}
-.item .tt{font-weight:600}
-.item .p{color:var(--sub);font-size:14px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.badge{display:inline-block;font-size:12px;padding:1px 8px;border-radius:8px;background:var(--line);color:var(--sub);margin-right:6px}
+.item .d{color:var(--accent);font-weight:700;font-size:13px;margin-right:8px}
+.item .tt{font-weight:700}
+.item .p{color:var(--sub);font-size:14px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--accent);margin-right:6px}
 .empty{text-align:center;color:var(--sub);margin-top:80px;line-height:1.8}
-.fab{position:fixed;right:20px;bottom:calc(28px + env(safe-area-inset-bottom));width:60px;height:60px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:32px;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer}
-.btn{background:none;border:none;color:var(--accent);font-size:17px;padding:6px 4px;cursor:pointer}
-.del{color:#ff3b30}
-.save{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:16px;font-weight:600;cursor:pointer}
-.save:disabled{opacity:.35;cursor:default}
+.fab{position:fixed;right:20px;bottom:calc(24px + env(safe-area-inset-bottom));width:60px;height:60px;border-radius:20px;border:none;background:var(--grad);color:#fff;font-size:32px;font-weight:300;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(47,111,237,.4);cursor:pointer;transition:transform .12s}
+.fab:active{transform:scale(.92)}
+.btn{background:none;border:none;color:var(--accent);font-size:16px;font-weight:600;padding:8px 12px;border-radius:10px;cursor:pointer;transition:background .15s}
+.btn:active{background:var(--soft)}
+#setupBtn{background:var(--soft)}
+.del{color:var(--danger)}
+.del:active{background:rgba(229,72,77,.12)}
+.save{background:var(--grad);color:#fff;border:none;border-radius:999px;padding:9px 20px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 3px 10px rgba(47,111,237,.3);transition:opacity .15s,transform .12s}
+.save:active{transform:scale(.96)}
+.save:disabled{opacity:.35;cursor:default;box-shadow:none;transform:none}
+.edit-pane header{padding:10px 12px;border-bottom:1px solid var(--line)}
 #status{flex:1;text-align:center;color:var(--sub);font-size:13px}
-.catsel{align-self:flex-start;margin:4px 20px 0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:15px}
-.title{border:none;outline:none;padding:10px 20px;font-size:22px;font-weight:700;background:var(--card);color:var(--text);font-family:inherit;border-bottom:1px solid var(--line)}
-textarea{flex:1;border:none;outline:none;resize:none;padding:14px 20px 40px;font-size:17px;line-height:1.7;background:var(--card);color:var(--text);font-family:inherit}
-.setup{display:none;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;gap:12px;padding:calc(40px + env(safe-area-inset-top)) 20px 20px}
+.catsel{align-self:flex-start;margin:14px 20px 0;padding:7px 12px;border:none;border-radius:999px;background:var(--soft);color:var(--accent);font-size:14px;font-weight:600;outline:none}
+.title{border:none;outline:none;padding:12px 20px 10px;font-size:22px;font-weight:800;letter-spacing:-.01em;background:var(--card);color:var(--text);font-family:inherit}
+.title::placeholder,textarea::placeholder{color:var(--sub);opacity:.7}
+textarea{flex:1;border:none;outline:none;resize:none;padding:6px 20px 40px;font-size:17px;line-height:1.75;background:var(--card);color:var(--text);font-family:inherit;caret-color:var(--accent)}
+/* 연결 설정 */
+.setup{display:none;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;gap:12px;padding:calc(48px + env(safe-area-inset-top)) 20px 20px}
+.setup>*{width:100%;max-width:440px;margin-left:auto;margin-right:auto}
 .setup.show{display:flex}
-.setup input{padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:var(--card);color:var(--text)}
+.setup h1{flex:0;margin-bottom:4px}
+.setup input{padding:14px;border:1px solid var(--line);border-radius:12px;font-size:16px;background:var(--card);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}
+.setup input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+.setup .save{padding:14px;border-radius:12px;margin-top:4px}
 #cfgMsg{color:var(--sub);font-size:14px}
 @media (min-width:768px){
   .list-pane{width:360px;flex-shrink:0;border-right:1px solid var(--line)}
   .edit-pane{display:flex;flex:1}
   .app.editing .list-pane{display:flex}
   .back{visibility:hidden}
-  .fab{right:auto;left:284px}
+  .fab{right:auto;left:280px}
+  .edit-pane header{padding-top:16px}
 }
 /* 글자 블록 선택 막기 (입력칸은 제외) */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
@@ -95,6 +123,7 @@ input,textarea,select{-webkit-user-select:text;user-select:text;-webkit-touch-ca
 
 <section class="setup" id="setup">
   <h1>연결 설정</h1>
+  <p id="cfgHelp" style="color:var(--sub);font-size:14px;line-height:1.6;margin-bottom:4px">메모 API 주소(/exec)와 비밀키를 넣으면<br>구글 드라이브의 메모를 불러옵니다.</p>
   <input id="cfgUrl" placeholder="API URL (https://script.google.com/.../exec)">
   <input id="cfgKey" type="password" placeholder="비밀키">
   <button class="save" onclick="saveCfg()">연결</button>
