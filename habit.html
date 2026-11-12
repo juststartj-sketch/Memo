@@ -243,15 +243,23 @@ async function api(action, args) {
   if (!j.ok) throw new Error(j.error);
   return j.data;
 }
+// 로컬 변경 횟수. 불러오기 도중 체크하면 늦게 도착한 옛 데이터로 덮어쓰지 않게 한다.
+let epoch = 0;
+// 저장 요청은 한 번에 하나씩 순서대로 보낸다 (서버 처리 순서 = 누른 순서)
+let queue = Promise.resolve();
 async function load() {
   if (!cfg || pending || (drag && drag.on)) return;
-  try { const d = await api('load', {}); if (!pending) { data = d; render(); saveCache(); } msg(''); }
+  const e0 = epoch;
+  try { const d = await api('load', {}); if (!pending && epoch === e0) { data = d; render(); saveCache(); } msg(''); }
   catch (e) { msg('불러오기 실패: ' + e.message); }
 }
-async function send(action, args) {
-  pending++;
-  try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); saveCache(); } msg(''); }
-  catch (e) { pending--; msg('저장 실패: ' + e.message); load(); }
+function send(action, args) {
+  epoch++; pending++;
+  queue = queue.then(async () => {
+    try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); saveCache(); } msg(''); }
+    catch (e) { pending--; msg('저장 실패: ' + e.message); if (!pending) load(); }
+  });
+  return queue;
 }
 
 function freqText(h) {
