@@ -212,7 +212,7 @@ const OLD_COLOR = { '#f5a623': '#2f6fed', '#e67e22': '#5b8def' };
 const hc = h => OLD_COLOR[String(h.color).toLowerCase()] || h.color;
 const WD = '일월화수목금토';
 let cfg = JSON.parse(localStorage.getItem('habitCfg') || 'null');
-let data = { habits: [], checks: {} }, pending = 0, showArchived = false, editId = null, selColor = COLORS[0], editType = 'bool';
+let data = { habits: [], checks: {} }, showArchived = false, editId = null, selColor = COLORS[0], editType = 'bool';
 let detailId = null, dMonth = new Date();
 
 const pad = n => String(n).padStart(2, '0');
@@ -239,28 +239,131 @@ function saveCache() {
 
 async function api(action, args) {
   const r = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, args }) });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error);
+  let j;
+  try { j = await r.json(); } catch (e) { throw new Error('응답 오류'); }
+  if (!j.ok) { const err = new Error(j.error); err.api = true; throw err; }   // api=true: 서버가 거부한 요청
   return j.data;
 }
+
+// ===== 미전송 목록(outbox) =====
+// 누른 즉시 화면·캐시·outbox를 localStorage에 저장하고, 서버에는 뒤에서 한 건씩 순서대로 보낸다.
+// 앱을 닫거나 네트워크가 끊겨도 outbox가 남아 있다가 다음에 이어서 보낸다.
+// (토글·저장·삭제·순서 모두 "값 지정"이라 같은 요청을 다시 보내도 결과가 같다)
+const OUTBOX_KEY = 'habitOutbox';
+let outbox = [], inflight = null, flying = false, retryTimer = null, retryMs = 0, lastErr = '';
 // 로컬 변경 횟수. 불러오기 도중 체크하면 늦게 도착한 옛 데이터로 덮어쓰지 않게 한다.
 let epoch = 0;
-// 저장 요청은 한 번에 하나씩 순서대로 보낸다 (서버 처리 순서 = 누른 순서)
-let queue = Promise.resolve();
-async function load() {
-  if (!cfg || pending || (drag && drag.on)) return;
-  const e0 = epoch;
-  try { const d = await api('load', {}); if (!pending && epoch === e0) { data = d; render(); saveCache(); } msg(''); }
-  catch (e) { msg('불러오기 실패: ' + e.message); }
+
+function loadOutbox() {
+  try {
+    const o = JSON.parse(localStorage.getItem(OUTBOX_KEY) || 'null');
+    if (o && cfg && o.url === cfg.url && Array.isArray(o.items)) outbox = o.items;
+  } catch (e) {}
 }
+function saveOutbox() {
+  try {
+    if (outbox.length && cfg) localStorage.setItem(OUTBOX_KEY, JSON.stringify({ url: cfg.url, items: outbox }));
+    else localStorage.removeItem(OUTBOX_KEY);
+  } catch (e) {}
+}
+function persist() { saveCache(); saveOutbox(); }
+function clearOutbox() {
+  outbox = []; inflight = null; lastErr = '';
+  clearTimeout(retryTimer); retryTimer = null; retryMs = 0;
+  try { localStorage.removeItem(OUTBOX_KEY); } catch (e) {}
+}
+
+// 상태 표시: 에러 > 미전송/동기화 중 > 비움
+function status() {
+  if (lastErr) { msg(lastErr); return; }
+  if (outbox.length) msg(retryTimer ? `미전송 ${outbox.length}건 · 다시 시도하는 중…` : `동기화 중… (${outbox.length}건)`);
+  else msg('');
+}
+function failMsg(t) {
+  lastErr = t; status();
+  setTimeout(() => { if (lastErr === t) { lastErr = ''; status(); } }, 5000);
+}
+
+// 같은 칸을 여러 번 누르면 마지막 값만 남긴다 (전송 중인 건은 건드리지 않는다)
+function enqueue(action, args) {
+  const idle = x => x !== inflight;
+  if (action === 'toggle') {
+    const x = outbox.find(x => idle(x) && x.action === 'toggle' && x.args.id === args.id && x.args.date === args.date);
+    if (x) { x.args = args; return; }
+  } else if (action === 'saveHabit') {
+    const x = outbox.find(x => idle(x) && x.action === 'saveHabit' && x.args.habit.id === args.habit.id);
+    if (x) { x.args = args; return; }
+  } else if (action === 'reorder') {
+    outbox = outbox.filter(x => !idle(x) || x.action !== 'reorder');   // 마지막 순서만 의미 있음
+  } else if (action === 'deleteHabit') {
+    // 지울 습관에 대한 대기 중인 저장·체크는 보낼 필요 없다
+    outbox = outbox.filter(x => !idle(x) || !((x.action === 'toggle' && x.args.id === args.id) ||
+      (x.action === 'saveHabit' && x.args.habit.id === args.id)));
+  }
+  outbox.push({ action, args });
+}
+
 function send(action, args) {
-  epoch++; pending++;
-  queue = queue.then(async () => {
-    try { const d = await api(action, args); pending--; if (!pending) { data = d; render(); saveCache(); } msg(''); }
-    catch (e) { pending--; msg('저장 실패: ' + e.message); if (!pending) load(); }
-  });
-  return queue;
+  epoch++; lastErr = '';
+  enqueue(action, args);
+  persist();
+  status();
+  flush();
 }
+
+async function flush() {
+  if (flying || !cfg) return;
+  clearTimeout(retryTimer); retryTimer = null;
+  flying = true;
+  let reload = false;
+  try {
+    while (outbox.length) {
+      const it = outbox[0];
+      inflight = it;
+      try {
+        const d = await api(it.action, it.args);
+        inflight = null;
+        if (!cfg) return;
+        outbox.shift(); retryMs = 0;
+        // 보낼 게 더 없으면 서버가 돌려준 최신 상태로 맞춘다 (드래그 중이면 다음 기회에)
+        if (!outbox.length && !(drag && drag.on)) { data = d; render(); }
+        persist(); status();
+      } catch (e) {
+        inflight = null;
+        if (!cfg) return;
+        if (e.api && (e.message === '인증 실패' || e.message === 'API 꺼짐')) {
+          // 설정 문제: 버리지 않고 보관해 둔다 (다음 주기에 다시 시도)
+          retryMs = 30000; retryTimer = setTimeout(flush, retryMs);
+          failMsg('전송 실패: ' + e.message + ' · 미전송 ' + outbox.length + '건 보관 중');
+          return;
+        } else if (e.api && !/lock/i.test(e.message)) {
+          // 서버가 거부한 요청은 다시 보내도 소용없으니 버리고, 서버 상태로 다시 맞춘다
+          outbox.shift(); reload = true; persist();
+          failMsg('저장 실패: ' + e.message);
+        } else {
+          // 네트워크 오류·잠금 대기: 화면은 그대로 두고 나중에 다시 보낸다
+          retryMs = Math.min(retryMs ? retryMs * 2 : 2000, 30000);
+          retryTimer = setTimeout(flush, retryMs);
+          status();
+          return;
+        }
+      }
+    }
+  } finally { flying = false; }
+  if (reload) load();
+}
+
+async function load() {
+  if (!cfg || outbox.length || flying || (drag && drag.on)) return;
+  const e0 = epoch;
+  try {
+    const d = await api('load', {});
+    if (!outbox.length && !flying && epoch === e0 && !(drag && drag.on)) { data = d; render(); saveCache(); }
+    status();
+  } catch (e) { msg('불러오기 실패: ' + e.message); }
+}
+// 주기적으로/앱이 다시 보일 때: 보낼 게 있으면 보내고, 없으면 새로 불러온다
+function tick() { if (outbox.length) flush(); else load(); }
 
 function freqText(h) {
   if (h.type === 'num') {
@@ -430,7 +533,6 @@ function applyOrder(ids) {
   if (next.every((h, i) => h === all[i])) return;
   data.habits = next;
   render();
-  msg('저장 중…');
   if (navigator.vibrate) navigator.vibrate(8);
   send('reorder', { ids: next.map(h => h.id) });
 }
@@ -568,7 +670,8 @@ function saveHabit() {
   const name = $('hName').value.trim();
   if (!name) { alert('이름을 입력하세요'); return; }
   const old = data.habits.find(x => x.id === editId) || {};
-  const habit = { ...old, id: editId, name, type: editType, color: selColor, archived: $('hArch').checked };
+  // id를 앱에서 정한다 → 응답을 못 받아 다시 보내도 습관이 중복으로 생기지 않는다
+  const habit = { ...old, id: editId || newId(), name, type: editType, color: selColor, archived: $('hArch').checked };
   if (editType === 'num') {
     const target = parseFloat($('hTarget').value);
     if (!(target > 0)) { alert('목표 숫자를 입력하세요'); return; }
@@ -578,8 +681,20 @@ function saveHabit() {
     if (num > den) { alert('횟수가 기간(일)보다 클 수 없습니다'); return; }
     Object.assign(habit, { num, den });
   }
-  closeModal(); msg('저장 중…');
+  closeModal();
+  // 서버 응답을 기다리지 않고 바로 화면에 반영 (서버 규칙과 같게 값을 다듬는다)
+  const i = data.habits.findIndex(x => x.id === habit.id);
+  const local = {
+    ...habit, name: name.slice(0, 40), unit: String(habit.unit || '').slice(0, 10),
+    created: i >= 0 ? data.habits[i].created : ymd(new Date())
+  };
+  if (i >= 0) { local.type = data.habits[i].type || 'bool'; data.habits[i] = local; } else data.habits.push(local);
+  render();
   send('saveHabit', { habit });
+}
+function newId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 function delHabit() {
   const h = data.habits.find(x => x.id === editId);
@@ -610,8 +725,9 @@ async function connect() {
   catch (e) { cfg = null; msg('연결 실패: ' + e.message); }
 }
 function resetCfg() {
-  if (!confirm('연결 정보를 지우고 다시 입력할까요? (습관 기록은 지워지지 않습니다)')) return;
-  localStorage.removeItem('habitCfg'); localStorage.removeItem(CACHE_KEY); cfg = null; show();
+  const left = outbox.length ? `\n\n※ 아직 서버에 보내지 못한 변경 ${outbox.length}건은 사라집니다.` : '';
+  if (!confirm('연결 정보를 지우고 다시 입력할까요? (서버의 습관 기록은 지워지지 않습니다)' + left)) return;
+  localStorage.removeItem('habitCfg'); localStorage.removeItem(CACHE_KEY); clearOutbox(); cfg = null; show();
 }
 function show() {
   $('setup').style.display = cfg ? 'none' : 'block';
@@ -619,10 +735,15 @@ function show() {
   if (cfg) render();
 }
 
-if (cfg) readCache();
-show(); load();
-setInterval(load, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); load(); } });
+if (cfg) { readCache(); loadOutbox(); }
+show(); status(); tick();
+setInterval(tick, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (outbox.length) flush(); }   // 닫히기 전에 남은 변경을 최대한 보낸다
+  else { render(); tick(); }
+});
+window.addEventListener('pagehide', () => { if (outbox.length) flush(); });
+window.addEventListener('online', () => { if (outbox.length) flush(); });
 </script>
 </body>
 </html>
